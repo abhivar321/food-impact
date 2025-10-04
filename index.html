@@ -44,11 +44,15 @@
 
         // Function to initialize Firebase
         const initFirebase = async () => {
+            if (Object.keys(firebaseConfig).length === 0) {
+                // Not running in Canvas environment (e.g., GitHub Pages). Skip Firebase init.
+                console.warn("Firebase configuration not found. Running in public session mode.");
+                window.userId = 'Public-Session-User';
+                window.isAuthReady = true;
+                return;
+            }
+
             try {
-                if (Object.keys(firebaseConfig).length === 0) {
-                    console.error("Firebase config is empty. Firestore will not be functional.");
-                    return;
-                }
                 
                 // Set Firestore log level for debugging
                 setLogLevel('Debug');
@@ -196,6 +200,7 @@
         const displayUserId = document.getElementById('display-user-id');
         
         let imageBase64 = null;
+        window.userApiKey = null; // Global variable to store the key for the current session
 
         // --- Utility Functions ---
 
@@ -286,8 +291,23 @@
             resultsDiv.classList.add('hidden');
             errorDiv.classList.add('hidden');
 
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            let apiKeyToUse = window.userApiKey;
+
+            // Check if we need to prompt for the key (required for public deployment)
+            if (!apiKeyToUse) {
+                const key = prompt("Please enter your Gemini API Key to run the analysis. This key is only stored temporarily in your browser session.");
+                if (key && key.trim()) {
+                    window.userApiKey = key.trim();
+                    apiKeyToUse = key.trim();
+                } else {
+                    showError("Gemini API Key is required for image analysis.");
+                    analyzeButton.disabled = false;
+                    loadingDiv.classList.add('hidden');
+                    return;
+                }
+            }
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKeyToUse}`;
 
             const systemPrompt = "You are an AI Food Scanner and Nutrition Analyst. Your task is to accurately estimate the food item, its volume, and its nutritional content based on the provided image, and suggest consumption strategies for health impact. Assume a standard 2000 kcal/day diet for an average adult.";
             const userQuery = "Analyze the food item and estimated serving size shown in the image. Return the analysis as a single JSON object structured according to the provided schema.";
@@ -353,7 +373,7 @@
 
             } catch (e) {
                 console.error("Error during food analysis:", e);
-                showError("The AI could not analyze the image or the response was invalid JSON. Please try another image.");
+                showError("The AI could not analyze the image. Please ensure your Gemini API Key is valid and try a clearer photo.");
             } finally {
                 loadingDiv.classList.add('hidden');
                 analyzeButton.disabled = false;
@@ -399,7 +419,8 @@
              // Polling for userId, since Firebase initialization is asynchronous
             const checkAuthInterval = setInterval(() => {
                 if (window.isAuthReady) {
-                    displayUserId.textContent = window.userId || 'Unavailable';
+                    // Update display based on whether Firebase successfully initialized
+                    displayUserId.textContent = window.userId === 'Public-Session-User' ? 'Public Session (API Key Required)' : window.userId;
                     clearInterval(checkAuthInterval);
                 }
             }, 100);
