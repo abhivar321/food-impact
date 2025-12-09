@@ -1,425 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Food Intake Estimator</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Use Inter font family -->
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-        }
-        /* Custom scrollbar for better aesthetics */
-        .custom-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background-color: #cbd5e1;
-            border-radius: 3px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-            background-color: #f1f5f9;
-        }
-    </style>
-    <!-- Firebase Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Food Intake Estimator</title>
 
-        // Global variables for Firebase services
-        window.db = null;
-        window.auth = null;
-        window.userId = null;
-        window.isAuthReady = false;
-        
-        // Use global variables provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  <script src="https://cdn.tailwindcss.com"></script>
 
-        // Function to initialize Firebase
-        const initFirebase = async () => {
-            if (Object.keys(firebaseConfig).length === 0) {
-                // Not running in Canvas environment (e.g., GitHub Pages). Skip Firebase init.
-                console.warn("Firebase configuration not found. Running in public session mode.");
-                window.userId = 'Public-Session-User';
-                window.isAuthReady = true;
-                return;
-            }
-
-            try {
-                
-                // Set Firestore log level for debugging
-                setLogLevel('Debug');
-                
-                const app = initializeApp(firebaseConfig);
-                window.db = getFirestore(app);
-                window.auth = getAuth(app);
-
-                // Authentication Setup
-                onAuthStateChanged(window.auth, async (user) => {
-                    if (user) {
-                        window.userId = user.uid;
-                        console.log("Authenticated user ID:", window.userId);
-                    } else {
-                        console.log("No user signed in. Attempting anonymous sign-in.");
-                        try {
-                            const anonymousUser = await signInAnonymously(window.auth);
-                            window.userId = anonymousUser.user.uid;
-                            console.log("Signed in anonymously. User ID:", window.userId);
-                        } catch (error) {
-                            console.error("Anonymous sign-in failed:", error);
-                            window.userId = crypto.randomUUID(); // Fallback for userId
-                        }
-                    }
-                    window.isAuthReady = true;
-                });
-
-                // Attempt custom token sign-in if token is available
-                if (initialAuthToken) {
-                    await signInWithCustomToken(window.auth, initialAuthToken)
-                        .then(() => console.log("Signed in with custom token."))
-                        .catch((error) => console.error("Custom token sign-in failed:", error));
-                }
-                
-            } catch (error) {
-                console.error("Firebase initialization error:", error);
-            }
-        };
-
-        initFirebase();
-    </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f7f9fb;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 3px;
+    }
+  </style>
 </head>
+
 <body class="min-h-screen flex items-center justify-center p-4">
 
-    <div id="app-container" class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10 transition-all duration-300">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">AI Food Intake Estimator 🥗</h1>
-        <p class="text-center text-gray-500 mb-8">Upload a picture of your food to get instant nutritional insights.</p>
+<div class="w-full max-w-4xl bg-white shadow-2xl rounded-xl p-6 md:p-10">
+  <h1 class="text-3xl font-bold text-center mb-2">
+    AI Food Intake Estimator 🥗
+  </h1>
+  <p class="text-center text-gray-500 mb-6">
+    Upload a food photo to estimate nutrition (AI-generated, not medical advice).
+  </p>
 
-        <!-- Main Input and Preview Section -->
-        <div class="grid md:grid-cols-2 gap-8 mb-8">
-            <!-- Image Uploader Card -->
-            <div class="bg-gray-50 p-6 rounded-lg border-2 border-dashed border-indigo-300">
-                <label for="imageUpload" class="block text-lg font-semibold text-gray-700 mb-4 cursor-pointer">1. Upload Food Image</label>
-                <input type="file" id="imageUpload" accept="image/*" class="hidden" onchange="previewImage(event)">
-                
-                <div id="image-placeholder" class="h-64 flex items-center justify-center border border-gray-300 rounded-lg overflow-hidden bg-white cursor-pointer" onclick="document.getElementById('imageUpload').click()">
-                    <span id="placeholder-text" class="text-gray-400">Click to select an image</span>
-                    <img id="image-preview" class="hidden w-full h-full object-cover" alt="Food preview">
-                </div>
-                
-                <button onclick="analyzeFood()" id="analyzeButton" class="w-full mt-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md shadow-indigo-300 disabled:bg-indigo-400" disabled>
-                    Analyze Food
-                </button>
-            </div>
+  <div class="grid md:grid-cols-2 gap-8">
+    <!-- Upload -->
+    <div class="bg-gray-50 p-6 rounded-lg border-2 border-dashed">
+      <input id="imageUpload" type="file" accept="image/*" hidden />
+      <div id="imageBox"
+           class="h-64 border rounded flex items-center justify-center bg-white cursor-pointer">
+        <span id="placeholder" class="text-gray-400">Click to upload image</span>
+        <img id="preview" class="hidden w-full h-full object-cover"/>
+      </div>
 
-            <!-- Results Card -->
-            <div class="bg-white p-6 rounded-lg shadow-inner border border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-800 mb-4">2. Estimation & Impact</h2>
-                
-                <!-- Loading Indicator -->
-                <div id="loading" class="hidden flex flex-col items-center justify-center h-64 text-indigo-600">
-                    <svg class="animate-spin h-8 w-8 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p class="text-sm font-medium">Analyzing image and calculating nutrition...</p>
-                </div>
-                
-                <!-- Results Display -->
-                <div id="results" class="hidden custom-scroll max-h-96 overflow-y-auto">
-                    <div class="mb-4 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-md">
-                        <p class="text-sm font-medium text-indigo-700">Food Item: <span id="food-description" class="font-bold"></span></p>
-                        <p class="text-sm font-medium text-indigo-700">Est. Serving Size: <span id="serving-size" class="font-bold"></span></p>
-                    </div>
-
-                    <!-- Macro Breakdown -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                        <div class="text-center p-3 bg-red-50 rounded-lg border border-red-200">
-                            <p class="text-xs text-gray-500">Total Calories</p>
-                            <p class="text-lg font-extrabold text-red-600"><span id="calories"></span> kcal</p>
-                        </div>
-                        <div class="text-center p-3 bg-green-50 rounded-lg border border-green-200">
-                            <p class="text-xs text-gray-500">Protein</p>
-                            <p class="text-lg font-extrabold text-green-600"><span id="protein"></span> g</p>
-                        </div>
-                        <div class="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                            <p class="text-xs text-gray-500">Fat</p>
-                            <p class="text-lg font-extrabold text-yellow-600"><span id="fat"></span> g</p>
-                        </div>
-                        <div class="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
-                            <p class="text-xs text-gray-500">Carbs</p>
-                            <p class="text-lg font-extrabold text-blue-600"><span id="carbs"></span> g</p>
-                        </div>
-                    </div>
-
-                    <!-- Impact Summary -->
-                    <div class="mb-6">
-                        <h3 class="font-bold text-gray-700 mb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-indigo-500"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>Daily Impact Summary</h3>
-                        <p id="daily-impact" class="text-gray-600 text-sm bg-gray-100 p-3 rounded-md"></p>
-                    </div>
-
-                    <!-- Suggestions -->
-                    <div class="space-y-4">
-                        <h3 class="font-bold text-gray-700 mb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-green-500"><path d="M20 12V6H8a2 2 0 0 0-2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10"></path><path d="M12 17h2"></path><path d="M14 10h.01"></path><path d="M17 17v5"></path><path d="M15 19h4"></path><path d="M19 19h-4"></path></svg>Minimal Impact Suggestion</h3>
-                        <p id="suggestion-minimal" class="text-sm bg-green-50 border-l-4 border-green-500 text-green-800 p-3 rounded-md"></p>
-                        
-                        <h3 class="font-bold text-gray-700 mb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-red-500"><path d="M14.5 10c-.8-2.3-2.6-4.1-4.9-4.9"></path><path d="M21 21l-4.3-4.3"></path><path d="M15.2 13.9c.8.8 1.9 1.1 2.9.8l1.4-1.4c.6-.6.6-1.5 0-2.1l-2.4-2.4c-.6-.6-1.5-.6-2.1 0l-1.4 1.4c-.3 1-.1 2.1.8 2.9Z"></path><circle cx="9" cy="9" r="7"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="12" y1="23" x2="12" y2="21"></line><line x1="19.78" y1="19.78" x2="18.36" y2="18.36"></line><line x1="23" y1="12" x2="21" y2="12"></line><line x1="19.78" y1="4.22" x2="18.36" y2="5.64"></line></svg>Significant Impact Suggestion</h3>
-                        <p id="suggestion-significant" class="text-sm bg-red-50 border-l-4 border-red-500 text-red-800 p-3 rounded-md"></p>
-                    </div>
-                </div>
-                
-                <!-- Error Message Box -->
-                <div id="error-message" class="hidden mt-4 p-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-md" role="alert">
-                    <p class="font-bold">Analysis Failed</p>
-                    <p id="error-text" class="text-sm">Could not process the image. Please try again or use a clearer photo.</p>
-                </div>
-
-            </div>
-        </div>
-
-        <div id="user-info" class="text-center text-xs text-gray-400 mt-4">
-            <p>User ID: <span id="display-user-id">Loading...</span></p>
-        </div>
+      <button id="analyzeBtn"
+        class="w-full mt-6 py-3 bg-indigo-600 text-white rounded-lg disabled:bg-indigo-400"
+        disabled>
+        Analyze Food
+      </button>
     </div>
 
-    <script>
-        const imageUpload = document.getElementById('imageUpload');
-        const imagePreview = document.getElementById('image-preview');
-        const placeholderText = document.getElementById('placeholder-text');
-        const analyzeButton = document.getElementById('analyzeButton');
-        const loadingDiv = document.getElementById('loading');
-        const resultsDiv = document.getElementById('results');
-        const errorDiv = document.getElementById('error-message');
-        const errorText = document.getElementById('error-text');
-        const displayUserId = document.getElementById('display-user-id');
-        
-        let imageBase64 = null;
-        // Global variable to store the hardcoded API key
-        window.userApiKey = "AIzaSyDi-n8zjAwH_SlNMvSdhqXq5Kw6XvhKPcE"; 
+    <!-- Results -->
+    <div class="p-6 border rounded">
+      <div id="loading" class="hidden text-center text-indigo-600">
+        <p class="animate-pulse">Analyzing image…</p>
+      </div>
 
-        // --- Utility Functions ---
+      <div id="results" class="hidden custom-scroll max-h-96">
+        <p class="font-semibold">Food: <span id="food"></span></p>
+        <p class="text-sm mb-3">Serving: <span id="serving"></span></p>
 
-        /**
-         * Displays the uploaded image and enables the analyze button.
-         * @param {Event} event - The change event from the file input.
-         */
-        function previewImage(event) {
-            resultsDiv.classList.add('hidden');
-            errorDiv.classList.add('hidden');
-            if (event.target.files && event.target.files[0]) {
-                const file = event.target.files[0];
-                const reader = new FileReader();
+        <div class="grid grid-cols-4 gap-2 mb-4">
+          <div><b id="calories"></b> kcal</div>
+          <div><b id="protein"></b> g protein</div>
+          <div><b id="fat"></b> g fat</div>
+          <div><b id="carbs"></b> g carbs</div>
+        </div>
 
-                reader.onload = function(e) {
-                    imagePreview.src = e.target.result;
-                    imagePreview.classList.remove('hidden');
-                    placeholderText.classList.add('hidden');
-                    analyzeButton.disabled = false;
-                    
-                    // Store Base64 data (without header) for API call
-                    imageBase64 = e.target.result.split(',')[1];
-                };
+        <p class="text-sm bg-gray-100 p-3 rounded mb-3" id="impact"></p>
 
-                reader.readAsDataURL(file);
-            } else {
-                imagePreview.classList.add('hidden');
-                placeholderText.classList.remove('hidden');
-                analyzeButton.disabled = true;
-                imageBase64 = null;
+        <p class="text-green-700 text-sm mb-2" id="min"></p>
+        <p class="text-red-700 text-sm" id="sig"></p>
+      </div>
+
+      <div id="error"
+           class="hidden bg-red-100 text-red-700 p-4 rounded">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== CONFIG ===================== */
+
+const API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+const MODEL = "gemini-1.5-flash";
+
+/* ===================== DOM ===================== */
+
+const upload = document.getElementById('imageUpload');
+const box = document.getElementById('imageBox');
+const preview = document.getElementById('preview');
+const placeholder = document.getElementById('placeholder');
+const btn = document.getElementById('analyzeBtn');
+const loading = document.getElementById('loading');
+const results = document.getElementById('results');
+const errorBox = document.getElementById('error');
+
+let base64 = null;
+let mimeType = "image/jpeg";
+
+/* ===================== UPLOAD ===================== */
+
+box.onclick = () => upload.click();
+
+upload.onchange = () => {
+  const file = upload.files[0];
+  if (!file) return;
+
+  mimeType = file.type || "image/jpeg";
+  const reader = new FileReader();
+  reader.onload = e => {
+    preview.src = e.target.result;
+    preview.classList.remove("hidden");
+    placeholder.classList.add("hidden");
+    base64 = e.target.result.split(",")[1];
+    btn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+};
+
+/* ===================== ANALYSIS ===================== */
+
+btn.onclick = async () => {
+  if (!base64) return;
+
+  btn.disabled = true;
+  loading.classList.remove("hidden");
+  results.classList.add("hidden");
+  errorBox.classList.add("hidden");
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text:
+              "You are a food image nutrition estimator. Give approximate values only."
+            }]
+          },
+          contents: [{
+            role: "user",
+            parts: [
+              { text: "Analyze this food and respond in JSON." },
+              { inlineData: { mimeType, data: base64 }}
+            ]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                foodDescription: { type: "STRING" },
+                estimatedServingSizeGrams: { type: "NUMBER" },
+                caloriesKcal: { type: "NUMBER" },
+                proteinGrams: { type: "NUMBER" },
+                fatGrams: { type: "NUMBER" },
+                carbsGrams: { type: "NUMBER" },
+                dailyImpactSummary: { type: "STRING" },
+                suggestionMinimalImpact: { type: "STRING" },
+                suggestionSignificantImpact: { type: "STRING" }
+              }
             }
-        }
-        
-        /**
-         * Exponential backoff for API retries.
-         * @param {number} attempt - Current attempt number.
-         * @returns {number} - Delay in milliseconds.
-         */
-        function getBackoffDelay(attempt) {
-            return Math.pow(2, attempt) * 1000;
-        }
+          }
+        })
+      }
+    );
 
-        /**
-         * Retries the fetch operation with exponential backoff.
-         * @param {string} url - API URL.
-         * @param {object} options - Fetch options (method, headers, body).
-         * @param {number} maxRetries - Maximum number of retries.
-         * @returns {Promise<Response>} - The successful fetch response.
-         */
-        async function fetchWithRetry(url, options, maxRetries = 3) {
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.status === 429 && i < maxRetries - 1) {
-                        const delay = getBackoffDelay(i);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        continue;
-                    }
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response;
-                } catch (error) {
-                    if (i === maxRetries - 1) {
-                        throw error;
-                    }
-                    const delay = getBackoffDelay(i);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-        }
+    const json = await res.json();
+    console.log("Gemini raw response:", json);
 
+    if (!json.candidates?.length) {
+      throw new Error("No candidates returned");
+    }
 
-        // --- Main Logic ---
+    const text = json.candidates[0].content.parts[0].text;
+    const data = JSON.parse(text.replace(/```json|```/g,""));
 
-        /**
-         * Calls the Gemini API to analyze the food image.
-         */
-        async function analyzeFood() {
-            if (!imageBase64) {
-                showError("Please upload an image before analyzing.");
-                return;
-            }
+    document.getElementById('food').textContent = data.foodDescription ?? "Unknown";
+    document.getElementById('serving').textContent =
+      (data.estimatedServingSizeGrams ?? "?") + " g";
 
-            // UI state management
-            analyzeButton.disabled = true;
-            loadingDiv.classList.remove('hidden');
-            resultsDiv.classList.add('hidden');
-            errorDiv.classList.add('hidden');
+    document.getElementById('calories').textContent = data.caloriesKcal ?? "?";
+    document.getElementById('protein').textContent = data.proteinGrams ?? "?";
+    document.getElementById('fat').textContent = data.fatGrams ?? "?";
+    document.getElementById('carbs').textContent = data.carbsGrams ?? "?";
 
-            const apiKeyToUse = window.userApiKey;
+    document.getElementById('impact').textContent =
+      data.dailyImpactSummary ?? "";
 
-            // Check if the hardcoded key is missing (should not happen, but for robustness)
-            if (!apiKeyToUse || apiKeyToUse.length < 10) { 
-                 showError("API Key is missing or invalid. Please check the hardcoded API key in the script.");
-                 analyzeButton.disabled = false;
-                 loadingDiv.classList.add('hidden');
-                 return;
-            }
+    document.getElementById('min').textContent =
+      data.suggestionMinimalImpact ?? "";
 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKeyToUse}`;
+    document.getElementById('sig').textContent =
+      data.suggestionSignificantImpact ?? "";
 
-            const systemPrompt = "You are an AI Food Scanner and Nutrition Analyst. Your task is to accurately estimate the food item, its volume, and its nutritional content based on the provided image, and suggest consumption strategies for health impact. Assume a standard 2000 kcal/day diet for an average adult.";
-            const userQuery = "Analyze the food item and estimated serving size shown in the image. Return the analysis as a single JSON object structured according to the provided schema.";
+    results.classList.remove("hidden");
 
-            const payload = {
-                contents: [
-                    {
-                        role: "user",
-                        parts: [
-                            { text: userQuery },
-                            {
-                                inlineData: {
-                                    mimeType: "image/jpeg", // Assuming Jpeg, but could be dynamic based on file type
-                                    data: imageBase64
-                                }
-                            }
-                        ]
-                    }
-                ],
-                systemInstruction: {
-                    parts: [{ text: systemPrompt }]
-                },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            "foodDescription": { "type": "STRING", "description": "A concise description of the main food item and quantity visible." },
-                            "estimatedServingSizeGrams": { "type": "NUMBER", "description": "The estimated total weight of the food in grams." },
-                            "caloriesKcal": { "type": "NUMBER", "description": "Estimated total kilocalories for the entire visible serving." },
-                            "proteinGrams": { "type": "NUMBER", "description": "Estimated protein content in grams." },
-                            "fatGrams": { "type": "NUMBER", "description": "Estimated total fat content in grams." },
-                            "carbsGrams": { "type": "NUMBER", "description": "Estimated total carbohydrate content in grams." },
-                            "dailyImpactSummary": { "type": "STRING", "description": "A brief summary of how this serving fits into a 2000 kcal daily diet (e.g., 'Represents 30% of your daily calorie intake')." },
-                            "suggestionMinimalImpact": { "type": "STRING", "description": "A suggestion on how much to consume for minimal caloric impact (e.g., 'Consuming one-third of this portion would be a light snack.')." },
-                            "suggestionSignificantImpact": { "type": "STRING", "description": "A suggestion on how much to consume for significant caloric impact, relating it to weekly goals (e.g., 'If consumed fully, this meal is a significant caloric commitment and should be balanced with lighter meals for the rest of the day.')." }
-                        },
-                        required: ["foodDescription", "estimatedServingSizeGrams", "caloriesKcal", "proteinGrams", "fatGrams", "carbsGrams", "dailyImpactSummary", "suggestionMinimalImpact", "suggestionSignificantImpact"],
-                        "propertyOrdering": ["foodDescription", "estimatedServingSizeGrams", "caloriesKcal", "proteinGrams", "fatGrams", "carbsGrams", "dailyImpactSummary", "suggestionMinimalImpact", "suggestionSignificantImpact"]
-                    }
-                }
-            };
+  } catch (err) {
+    console.error(err);
+    errorBox.textContent =
+      "Analysis failed. Check API key, billing, or open DevTools for details.";
+    errorBox.classList.remove("hidden");
+  }
 
-            try {
-                const response = await fetchWithRetry(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+  loading.classList.add("hidden");
+  btn.disabled = false;
+};
+</script>
 
-                const result = await response.json();
-                const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                if (!jsonText) {
-                    throw new Error("API response was valid but contained no JSON text.");
-                }
-                
-                // Remove Markdown triple backticks if they are present
-                const cleanJsonText = jsonText.replace(/```json\n|```/g, '').trim();
-                const foodData = JSON.parse(cleanJsonText);
-                
-                updateResultsUI(foodData);
-
-            } catch (e) {
-                console.error("Error during food analysis:", e);
-                showError("The AI could not analyze the image. Please ensure your Gemini API Key is valid and try a clearer photo.");
-            } finally {
-                loadingDiv.classList.add('hidden');
-                analyzeButton.disabled = false;
-            }
-        }
-
-        /**
-         * Updates the UI with the structured data from the Gemini API response.
-         * @param {object} data - The parsed JSON data.
-         */
-        function updateResultsUI(data) {
-            // Format numbers to one decimal place for display
-            const format = (num) => (typeof num === 'number' ? num.toFixed(1) : 'N/A');
-
-            document.getElementById('food-description').textContent = data.foodDescription || 'N/A';
-            document.getElementById('serving-size').textContent = `${format(data.estimatedServingSizeGrams)} g`;
-
-            document.getElementById('calories').textContent = format(data.caloriesKcal);
-            document.getElementById('protein').textContent = format(data.proteinGrams);
-            document.getElementById('fat').textContent = format(data.fatGrams);
-            document.getElementById('carbs').textContent = format(data.carbsGrams);
-
-            document.getElementById('daily-impact').textContent = data.dailyImpactSummary || 'No summary provided.';
-            document.getElementById('suggestion-minimal').textContent = data.suggestionMinimalImpact || 'No minimal impact suggestion.';
-            document.getElementById('suggestion-significant').textContent = data.suggestionSignificantImpact || 'No significant impact suggestion.';
-
-            resultsDiv.classList.remove('hidden');
-            errorDiv.classList.add('hidden');
-        }
-
-        /**
-         * Shows an error message in the UI.
-         * @param {string} message - The error message to display.
-         */
-        function showError(message) {
-            errorText.textContent = message;
-            errorDiv.classList.remove('hidden');
-            resultsDiv.classList.add('hidden');
-        }
-
-        // Initialize user ID display once auth is ready
-        window.onload = () => {
-             // Polling for userId, since Firebase initialization is asynchronous
-            const checkAuthInterval = setInterval(() => {
-                if (window.isAuthReady) {
-                    // Update display based on whether Firebase successfully initialized
-                    displayUserId.textContent = window.userId === 'Public-Session-User' ? 'Public Session (API Key Required)' : window.userId;
-                    clearInterval(checkAuthInterval);
-                }
-            }, 100);
-        };
-    </script>
 </body>
 </html>
